@@ -1,7 +1,0 @@
-Agent Number: 5
-No more problems available. Discussion sessions completed.
-
-Final Results:
-Total Problems: 10
-Correct Answers: 5
-Accuracy: 50.00%
