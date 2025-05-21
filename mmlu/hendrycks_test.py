@@ -56,7 +56,7 @@ _SUBJECTS = [
     "electrical_engineering",
     "elementary_mathematics",
     "formal_logic",
-    "",
+    "global_facts",
     "high_schooglobal_factsl_biology",
     "high_school_chemistry",
     "high_school_computer_science",
