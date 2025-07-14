@@ -1,6 +1,0 @@
-No more problems available. Discussion sessions completed.
-
-Final Results:
-Total Problems: 10
-Correct Answers: 6
-Accuracy: 60.00%
