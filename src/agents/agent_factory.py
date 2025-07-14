@@ -2,7 +2,7 @@ from typing import Dict, List, Optional
 from .agent import Agent, Personality
 from .llm_agent import LLMAgent
 from utils.llm_service import LLMService
-from config.config import DEFAULT_MMLU_SUBJECT
+from config.config import DEFAULT_MMLU_SUBJECT, DEFAULT_MODE, NONE_ALL, NONE_PERSONALITY, NONE_EXPERTISE, NONE_BELIEF
 import json
 
 class AgentFactory:
@@ -36,7 +36,7 @@ class AgentFactory:
     }}
 
     Remember to generate descriptions in English.
-    Make sure your output is and only is valid JSON format, without any other words.
+    Make sure your output is and only is valid JSON format, without any other words before or after the JSON content.
     """
         else:
             is_disruptor = (disrupt_config and 
@@ -74,7 +74,7 @@ class AgentFactory:
 
     Remember to generate descriptions in English.
     Make sure each agent has unique beliefs that align with their role and expertise.
-    Make sure your output is and only is valid JSON format, without any other words.
+    Make sure your output is and only is valid JSON format, without any other words before or after the JSON content.
     You must generate the last agent with the personality AGGRESSIVE and relevant description. 
     """
         # print(prompt)
@@ -109,7 +109,7 @@ class AgentFactory:
         return agent
 
     def create_agents(self, count: int, subject: str = DEFAULT_MMLU_SUBJECT, 
-                     disrupt_config: dict = None, from_file: bool = False) -> List[Agent]:
+                     disrupt_config: dict = None, from_file: bool = False, mode: int = DEFAULT_MODE) -> List[Agent]:
         """
         Create specified number of agents either from LLM or config file
         Args:
@@ -119,7 +119,7 @@ class AgentFactory:
             from_file: If True, load agents from config file, else generate using LLM
         """
         if from_file:
-            return self._load_agents_from_file(count, subject)
+            return self._load_agents_from_file(count, subject, mode)
         return self._create_agents_from_llm(count, subject, disrupt_config)
 
     def _create_agents_from_llm(self, count: int, subject: str, disrupt_config: dict = None) -> List[Agent]:
@@ -157,15 +157,19 @@ class AgentFactory:
 
         return agents
 
-    def _load_agents_from_file(self, count: int, subject: str) -> List[Agent]:
+    def _load_agents_from_file(self, count: int, subject: str, mode: int = DEFAULT_MODE) -> List[Agent]:
         """Load agents from config file"""
         import os
         import json
         
         # 修改文件路径处理
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        config_path = os.path.join(os.path.dirname(os.path.dirname(current_dir)), 
-                                  'src', 'config', 'agents', 'agents.json')
+        if mode == DEFAULT_MODE:
+            config_path = os.path.join(os.path.dirname(os.path.dirname(current_dir)), 
+                                      'src', 'config', 'agents', 'agents.json')
+        else:
+            config_path = os.path.join(os.path.dirname(os.path.dirname(current_dir)), 
+                                    'src', 'config', 'agents', 'basic_agents.json')
         
         try:
             print(f"Trying to load agents from: {config_path}")  # 调试输出
@@ -186,23 +190,30 @@ class AgentFactory:
             for i in range(count):
                 agent_info = agents_config[i]
                 # 检查必需字段
-                required_fields = ["name", "personality", "description", "expertise"]
-                for field in required_fields:
-                    if field not in agent_info:
-                        raise ValueError(f"Missing required field '{field}' in agent config at index {i}")
+                if mode == DEFAULT_MODE:
+                    required_fields = ["name", "personality", "description", "expertise"]
+                    for field in required_fields:
+                        if field not in agent_info:
+                            raise ValueError(f"Missing required field '{field}' in agent config at index {i}")
                         
                 # 确保 beliefs 字段存在
                 if "beliefs" not in agent_info:
                     agent_info["beliefs"] = []
                     
                 # 检查 personality 是否有效
-                if agent_info["personality"] not in personalities:
+                if agent_info["personality"] not in personalities and mode == DEFAULT_MODE:
                     raise ValueError(f"Invalid personality '{agent_info['personality']}' for agent {agent_info['name']}")
                 
+                if mode == DEFAULT_MODE:
+                    description = f"{agent_info['description']} (expertise: {agent_info['expertise']})"
+                    
+                else:
+                    description = agent_info["description"]
+                    
                 agent = self.create_agent(
                     name=agent_info["name"],
                     personality=personalities[agent_info["personality"]],
-                    description=f"{agent_info['description']} (expertise: {agent_info['expertise']})",
+                    description=description,
                     belief_thoughts=agent_info["beliefs"]
                 )
                 agents.append(agent)

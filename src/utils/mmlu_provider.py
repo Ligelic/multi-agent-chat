@@ -1,4 +1,6 @@
 from typing import List, Optional
+import os
+os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 from datasets import load_dataset
 import datasets
 import pandas as pd

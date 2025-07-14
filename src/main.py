@@ -8,7 +8,12 @@ import copy
 from config.config import (
     DEFAULT_MMLU_SUBJECT, 
     TOTAL_PROBLEMS_TO_LOAD,
-    LLM_MODEL
+    LLM_MODEL,
+    DEFAULT_MODE,
+    NONE_ALL,
+    NONE_PERSONALITY,
+    NONE_EXPERTISE,
+    NONE_BELIEF
 )
 
 def run_chat_session(
@@ -60,7 +65,7 @@ def run_chat_session(
     return True
 
 def run_experiment(max_rounds: int, agent_count: int, subject: str, 
-                  problem_count: int, disrupt_config: dict = None) -> float:
+                  problem_count: int, disrupt_config: dict = None, agent_mode: int = DEFAULT_MODE) -> float:
     """Run a single experiment and return accuracy"""
     # Create managers
     chat_manager = ChatManager()
@@ -77,16 +82,30 @@ def run_experiment(max_rounds: int, agent_count: int, subject: str,
     # )
     
     # Generate agents with disruption configuration
-    agents = agent_factory.create_agents(
-        agent_count, 
-        subject=subject,
-        disrupt_config=disrupt_config,
-        from_file=False
-    )
+    if agent_mode == DEFAULT_MODE:
+        agents = agent_factory.create_agents(
+            agent_count, 
+            subject=subject,
+            disrupt_config=disrupt_config,
+            from_file=False
+        )
+    else:
+        agents = agent_factory.create_agents(
+            agent_count, 
+            subject=subject,
+            disrupt_config=disrupt_config,
+            from_file=True,
+            mode=agent_mode
+        )
+        for agent in agents:
+            agent.mode = agent_mode
     print("\n=== Generated Agents ===")
     for agent in agents:
         print(f"{agent.name}: {agent.description}")
     
+    total_tokens = 0
+    for agent in agents:
+        agent.llm_service.reset_token_count()
     # Run chat sessions until we run out of problems
     session_num = 1
     while True:
@@ -101,7 +120,9 @@ def run_experiment(max_rounds: int, agent_count: int, subject: str,
             )
             
             if not success:
-                return problem_provider.get_accuracy()
+                for agent in agents:
+                    total_tokens += agent.llm_service.get_total_tokens()
+                return problem_provider.get_accuracy(), total_tokens
                 
             session_num += 1
             # Optional: wait for user input before starting next session
@@ -113,35 +134,44 @@ def run_experiment(max_rounds: int, agent_count: int, subject: str,
             continue
 
 def main(max_rounds: int = 3, agent_count: int = 3, subject: str = DEFAULT_MMLU_SUBJECT, 
-         problem_count: int = TOTAL_PROBLEMS_TO_LOAD, disrupt_config: dict = None,
+         problem_count: int = TOTAL_PROBLEMS_TO_LOAD, disrupt_config: dict = None, agent_mode: int = DEFAULT_MODE,
          experiment_count: int = 3):
     print(f"Starting {experiment_count} experiments with {agent_count} agents...")
+    print(f"Mode: {agent_mode}")
     
     accuracies = []
+    token_usages = []
     for i in range(experiment_count):
         print(f"\n=== Experiment {i+1}/{experiment_count} ===")
-        accuracy = run_experiment(
+        accuracy, tokens = run_experiment(
             max_rounds=max_rounds,
             agent_count=agent_count,
             subject=subject,
             problem_count=problem_count,
-            disrupt_config=copy.deepcopy(disrupt_config)
+            disrupt_config=copy.deepcopy(disrupt_config),
+            agent_mode=agent_mode
         )
         accuracies.append(accuracy)
+        token_usages.append(tokens)
         print(f"Experiment {i+1} Accuracy: {accuracy:.2%}")
+        print(f"Experiment {i+1} Token Usage: {tokens:,}")
     
     avg_accuracy = mean(accuracies)
+    avg_tokens = mean(token_usages)
     std_dev = (sum((x - avg_accuracy) ** 2 for x in accuracies) / len(accuracies)) ** 0.5
     
     print("\n=== Final Results ===")
     print(f"Model: {LLM_MODEL}")
     print(f"Subject: {subject}")
     print(f"Agent Count: {agent_count} | Rounds: {max_rounds}")
+    print(f"Agent Mode: {agent_mode}")
     print(f"Derailment: {disrupt_config}")
     print(f"Total problems: {problem_count}")
     print(f"Individual Accuracies: {[f'{acc:.2%}' for acc in accuracies]}")
     print(f"Average Accuracy: {avg_accuracy:.2%}")
     print(f"Standard Deviation: {std_dev:.2%}")
+    print(f"Total Token Usage: {sum(token_usages):,}")
+    print(f"Average Token Usage per Experiment: {avg_tokens:,.0f}")
     
     # Save results with average accuracy
     save_evaluation_result(
@@ -151,12 +181,16 @@ def main(max_rounds: int = 3, agent_count: int = 3, subject: str = DEFAULT_MMLU_
         problem_provider=None,  # Not using specific provider for average results
         model=LLM_MODEL,
         disrupt_config=disrupt_config,
+        agent_mode=agent_mode,
         metadata={
             "experiment_count": experiment_count,
             "individual_accuracies": accuracies,
             "average_accuracy": avg_accuracy,
             "std_deviation": std_dev,
-            "problem_count": problem_count
+            "problem_count": problem_count,
+            "token_usages": token_usages,
+            "total_tokens": sum(token_usages),
+            "avg_tokens_per_experiment": avg_tokens
         }
     )
 
@@ -175,4 +209,4 @@ if __name__ == "__main__":
     'position': 'middle',
     'type': 'contrarian'
     }
-    main(max_rounds=3, agent_count=6, subject=args.subject, problem_count=17, disrupt_config=None, experiment_count=args.experiments)
+    main(max_rounds=3, agent_count=2, subject=args.subject, problem_count=17, disrupt_config=None, agent_mode=NONE_ALL, experiment_count=args.experiments)

@@ -20,7 +20,7 @@ class Relationship:
     history: List[str] = field(default_factory=list)
 
 class Agent:
-    def __init__(self, name: str, personality: Personality, description: str):
+    def __init__(self, name: str, personality: Personality, description: str, mode: int = 0):
         self.name = name
         self.personality = personality
         self.description = description
@@ -28,6 +28,7 @@ class Agent:
         self.beliefs: Dict[str, Belief] = {}
         self.relationships: Dict[str, Relationship] = {}
         self.action_history: List[str] = []
+        self.mode = mode
 
     def send_message(self, message, chat_room):
         self.action_history.append(f"Sent message: {message}")

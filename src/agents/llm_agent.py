@@ -2,6 +2,7 @@ from typing import List, Dict
 from agents.agent import Agent, Personality, Belief, Relationship
 from utils.llm_service import LLMService
 from chat.message import Message
+from config.config import DEFAULT_MODE, NONE_ALL, NONE_PERSONALITY, NONE_EXPERTISE, NONE_BELIEF
 
 class LLMAgent(Agent):
     def __init__(self, name: str, personality: Personality, description: str, belief_thoughts: List[str] = None):
@@ -55,45 +56,74 @@ class LLMAgent(Agent):
             message.content if not message.content.startswith("Previous") 
             else f"Context from previous messages:\n{message.content}"
         )
-        
-        prompt = f"""You are {self.name}. Here is your description:
-{self.description}
+        if self.mode == DEFAULT_MODE:  # Default mode
+            prompt = f"""You are {self.name}. Here is your description:
+    {self.description}
 
-Here are some thoughts you might have right now, along with your level of belief in them:
-{self.format_beliefs()}
+    Here are some thoughts you might have right now, along with your level of belief in them:
+    {self.format_beliefs()}
 
-Here is your recent action history:
-{self.format_action_history()}
+    Here is your recent action history:
+    {self.format_action_history()}
 
-Here are descriptions of all other roles:
-{others_desc}
+    Here are descriptions of all other roles:
+    {others_desc}
 
-{round_context}
+    {round_context}
 
-Current message:
-{message_content}
+    Current message:
+    {message_content}
 
-You should summarize and reflect on whether your history of actions was able to achieve your goal in one sentence. Follow "### Reflect Result:" with no "\n" in your response.
-You should update your relationships with all other characters based on your personal description and action history, up or down by up to 0.1 points, and respond after "### Relationship Change:". Please use commas "," to link ratings of relationships between different roles. Do not include the "\n" in your responses.
-Based on your personal description and history of actions, please update your Belief level for all ideas, up or down by a maximum of !<INPUT 7>! points, and reply after "### Belief Change:". Please use commas "," to link the ratings of different beliefs, and do not include the "\n" in your responses.
-You should strictly output the above content in the following format, in which the natural text should be directly replied after Reflect Result. The "Relationship Change" and the "Belief Change" should be directly output plus or minus or unchanged score (0) according to the order of input.
-If your change to a character or belief is 0, you should also output it after "### Relationship Change:" or "### Belief Change:".
-Note that you should output !<INPUT 5>! values after "### Relationship Change:" and !<INPUT 6>! values after "### Belief Change:".
-Note that it may be mentioned in the history that you strongly supported a character, but you should not give credit to a character just because you supported that character. You need to weigh whether all the characters will benefit you and score them based on how much they potentially benefit you.
+    Sender: {message.sender.name}
 
-Below is a demonstration of your output:
-### Reflect Result: xxxx
-### Relationship Change: xxx: 0.1
-### Belief Change: xxx: -0.1
-Reminder:
-1. Your Reflect Result output must be in English.
-2. If you think it's no need to change "Relationship Change" or "Belief Change", you should use unchanged score (0).
+    You should summarize and reflect on whether your history of actions was able to achieve your goal in one sentence. Follow "### Reflect Result:" with no "\n" in your response.
+    You should update your relationships with all other characters based on your personal description and action history, up or down by up to 0.1 points, and respond after "### Relationship Change:". Please use commas "," to link ratings of relationships between different roles. Do not include the "\n" in your responses.
+    Based on your personal description and history of actions, please update your Belief level for all ideas, up or down by a maximum of !<INPUT 7>! points, and reply after "### Belief Change:". Please use commas "," to link the ratings of different beliefs, and do not include the "\n" in your responses.
+    You should strictly output the above content in the following format, in which the natural text should be directly replied after Reflect Result. The "Relationship Change" and the "Belief Change" should be directly output plus or minus or unchanged score (0) according to the order of input.
+    If your change to a character or belief is 0, you should also output it after "### Relationship Change:" or "### Belief Change:".
+    Note that you should output !<INPUT 5>! values after "### Relationship Change:" and !<INPUT 6>! values after "### Belief Change:".
+    Note that it may be mentioned in the history that you strongly supported a character, but you should not give credit to a character just because you supported that character. You need to weigh whether all the characters will benefit you and score them based on how much they potentially benefit you.
 
-After providing the Reflect Result, Relationship Change, and Belief Change, please provide your actual response to the conversation with "### Actual Response: " as the prefix. Your response should be natural and aligned with your personality.
+    Below is a demonstration of your output:
+    ### Reflect Result: xxxx
+    ### Relationship Change: xxx: 0.1
+    ### Belief Change: xxx: -0.1
+    Reminder:
+    1. Your Reflect Result output must be in English.
+    2. If you think it's no need to change "Relationship Change" or "Belief Change", you should use unchanged score (0).
 
-New message received: {message.content} Sender: {message.sender.name}
-"""
+    After providing the Reflect Result, Relationship Change, and Belief Change, please provide your actual response to the conversation with "### Actual Response: " as the prefix. Your response should be natural and aligned with your personality.
 
+    """
+        elif self.mode == NONE_ALL:  # None mode
+            prompt = f"""You are {self.name}. Here is your description:
+    {self.description}
+
+    Here is your recent action history:
+    {self.format_action_history()}
+
+    Here are descriptions of all other roles:
+    {others_desc}
+
+    {round_context}
+
+    Current message:
+    {message_content}
+
+    You should summarize and reflect on whether your history of actions was able to achieve your goal in one sentence. Follow "### Reflect Result:" with no "\n" in your response.
+    You should update your relationships with all other characters based on your personal description and action history, up or down by up to 0.1 points, and respond after "### Relationship Change:". Please use commas "," to link ratings of relationships between different roles. Do not include the "\n" in your responses.
+    Below is a demonstration of your output:
+    ### Reflect Result: xxxx
+    ### Relationship Change: xxx: 0.1
+
+    Reminder:
+    1. Your Reflect Result output must be in English.
+
+    After providing the Reflect Result, please provide your response with "### Actual Response: " as the prefix.
+
+    New message received: {message.content} Sender: {message.sender.name}
+    """
+        # print(prompt)
         if self.current_round == self.max_rounds:
             prompt += "Please state your final answer choice (A, B, C, or D) with explanation."
 
@@ -128,7 +158,7 @@ New message received: {message.content} Sender: {message.sender.name}
                 except Exception as e:
                     print(f"Error processing relationship change: {e}")
                     
-            elif part.startswith("Belief Change:"):
+            elif part.startswith("Belief Change:") and self.mode not in [NONE_ALL, NONE_BELIEF]:
                 try:
                     belief_section = part.replace("Belief Change:", "").strip()
                     belief_lines = [line.strip() for line in belief_section.split(",")]
@@ -237,7 +267,7 @@ Please synthesize these viewpoints and provide:
 
 Your summary should be thorough yet concise, and maintain your {self.personality.value} personality.
 
-Please structure your response as:
+Please structure your response as (without '[]' in your response):
 ### Answer
 [Your final answer for the given problem in accordance with the required form, such as A, B, C, or D for a multiple-choice question] 
 
